@@ -44,7 +44,7 @@ const calc_independent_stats = (p) => {
 
     let randomsummon_abilities = abilities.find_abilities("randomsummon")
     for (let randomsummons of randomsummon_abilities) {
-        player.summons = [...player.summons, ...randomsummons.map( e => e.choose_random() )]
+        player.summons = [...player.summons, ...randomsummons.map( e => bestiary[e.choose_random()] )]
     }
 
     // Now that summons are all finished, create summons & field merger
