@@ -132,7 +132,7 @@ const joinRoom   = (roomId, player2Id) => { rooms[roomId]["players"][player2Id] 
 const get_open_rooms = () => {
     let roomIds = Object.keys(rooms)
     console.log("open_rooms", rooms)
-    return roomIds ? roomIds.filter( room => Object.keys(rooms[room].players).length < 2) : []
+    return roomIds ? roomIds.filter( room => Object.keys(rooms[room].players).length === 1) : []
 }
 
 // server.js
