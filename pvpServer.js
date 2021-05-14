@@ -1,9 +1,7 @@
 var app  = require('express')();
 var http = require('http').Server(app);
 var io   = require('socket.io')(http, 
-    // { cors: { origin: "http://localhost:3000", methods: ["GET", "POST"] } }
     { cors: { origin: "*", methods: ["GET", "POST"] } }
-    // { cors: { origin: "*:*", methods: ["GET", "POST"], pingTimeout: 7000, pingInterval: 3000 } }
 );
 
 var bestiary = require('./SpyCards_Bestiary');
@@ -14,24 +12,12 @@ var {
 } = require('./EvaluateCombat');
 
 const PORT = process.env.PORT || 4000
-// const PORT = 4000
 
 const new_blank_stats = () => ({
     "heal": 0, "lifesteal": 0, "numb": 0, "atk": 0, "def": 0, "numb_def": 0, "atk_or_def": []
 })
 
-// MEMO: VsCpu.js shuffles player deck inside play_selected()
-let rooms = {
-    "roomId": {
-        players:{
-            "p1": {name:"P1",hp:5,field:[],summons:[],deck:[],hand:[],stats:new_blank_stats(),setup:[]},
-            "p2": {name:"P2",hp:5,field:[],summons:[],deck:[],hand:[],stats:new_blank_stats(),setup:[]},
-        },
-        turn: 1,
-        phase: "Main Phase",
-        resultPending: true,
-    }
-}
+let rooms = {"example": {players: {}, turn: 1, phase: "Main Phase", resultPending: true, rematchAccepted: []}}
 
 const jsonstring_to_deck = (jsonstring) => {
     let deck_list = JSON.parse(jsonstring)
@@ -44,20 +30,6 @@ const draw_phase = (room, player1, player2) => {
     draw_n_cards(room, player2)
     rooms[room].phase = "Main Phase"
 }
-
-// cleaner shuffle code, but doesn't work correctly 
-// inserts undefineds into list (WHY?)
-
-// const shuffle_deck = (deck) => {
-//     let deckCopy = [...deck]
-//     for (let i = deckCopy.length; i > 0; i--) {
-//         let rng = Math.floor(Math.random() * i)
-//         let tmp = deckCopy[i]
-//         deckCopy[i] = deckCopy[rng]
-//         deckCopy[rng] = tmp
-//     }
-//     return deckCopy
-// }
 
 const shuffle_deck = (deck) => {
     let array = deck 
@@ -150,6 +122,7 @@ const initRoom = (roomId, userId) => {
             phase: "Main Phase",
             resultPending: true,
             readyPlayers: [],
+            rematchAccepted: [],
         }
     }
 }
@@ -260,7 +233,31 @@ io.on("connection", (socket) => {
                 }
             }, 3000)
         }
+    })
 
+    socket.on("rematch-request", data => {
+        let [player, room, deck] = [data.player, data.room, data.deck]
+        rooms[room].players[player] = {
+            ...initNewPlayer(player),
+            deck: shuffle_deck(jsonstring_to_deck(deck))
+        }
+        rooms[room].rematchAccepted = [...rooms[room].rematchAccepted, player]
+        if (rooms[room].rematchAccepted.length === 2) {
+            rooms[room] = {
+                ...rooms[room],
+                players: { ...rooms[room].players },
+                turn: 1,
+                phase: "Main Phase",
+                resultPending: true,
+                readyPlayers: [],
+                rematchAccepted: [],
+            }
+            let [p1, p2] = Object.keys(rooms[room].players)
+            draw_phase(room, p1, p2)
+            io.to(room).emit("match-start", {
+                players: rooms[room].players, phase: "Main Phase", turn: rooms[room].turn
+            })
+        }
     })
 })
 
