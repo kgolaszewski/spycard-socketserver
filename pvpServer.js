@@ -106,6 +106,10 @@ const valid_move = (room, player, selected) => {
 }
 
 // rooms.js 
+let socketUsernameKvp = {
+    // [socket.client.id]: {user: [data.user], room: [data.room]}
+}
+
 const initNewPlayer = (player_name) => ({
     name: player_name,
     hp: 5, field: [], summons: [], deck: [], hand: [],
@@ -113,7 +117,7 @@ const initNewPlayer = (player_name) => ({
     selected: [],
 })
 
-const initRoom = (roomId, userId) => {
+const initRoom = (socketId, roomId, userId) => {
     rooms = {
         ...rooms,
         [roomId]: { 
@@ -125,14 +129,30 @@ const initRoom = (roomId, userId) => {
             rematchAccepted: [],
         }
     }
+    socketUsernameKvp[socketId] = {user: userId, room: roomId}
 }
 
-const joinRoom   = (roomId, player2Id) => { rooms[roomId]["players"][player2Id] = initNewPlayer(player2Id) }
+const joinRoom   = (socketId, roomId, player2Id) => { 
+    rooms[roomId]["players"][player2Id] = initNewPlayer(player2Id) 
+    socketUsernameKvp[socketId] = {user: player2Id, room: roomId}
+}
 
 const get_open_rooms = () => {
     let roomIds = Object.keys(rooms)
-    console.log("open_rooms", rooms)
+    console.log("open_rooms:", Object.keys(rooms))
     return roomIds ? roomIds.filter( room => Object.keys(rooms[room].players).length === 1) : []
+}
+
+const handleDisconnect = (socketId) => {
+    if (socketId in socketUsernameKvp) {
+        console.log(socketUsernameKvp[socketId])
+        // let user = socketUsernameKvp[socketId].user
+        let room = socketUsernameKvp[socketId].room
+        if (Object.keys(rooms[room].players).length === 1) { 
+            delete rooms[room] 
+            io.to("room-lobby").emit("room-joined", get_open_rooms())
+        }
+    }
 }
 
 // server.js
@@ -145,7 +165,7 @@ io.on("connection", (socket) => {
         if (data.room in rooms) { 
             socket.emit("display-error", "That room is already taken.");
         } else {
-            initRoom(data.room, data.user)
+            initRoom(socket.client.id, data.room, data.user)
             console.log("create-room\n", rooms)
             io.to("room-lobby").emit("room-created", get_open_rooms())
             socket.join(data.room)
@@ -159,7 +179,7 @@ io.on("connection", (socket) => {
 
     socket.on("join-room", data => {
         if (data.room in rooms) {
-            joinRoom(data.room, data.user)
+            joinRoom(socket.client.id, data.room, data.user)
             io.to("room-lobby").emit("room-joined", get_open_rooms())
             socket.join(data.room)
         } else { socket.emit("display-error", "That room doesn't exist.") }
@@ -258,6 +278,16 @@ io.on("connection", (socket) => {
                 players: rooms[room].players, phase: "Main Phase", turn: rooms[room].turn
             })
         }
+    })
+
+    socket.on("player-disconnect", () => {
+        console.log(`player-disconnect detected, User: ${socket.client.id}`)
+        handleDisconnect(socket.client.id)
+    })
+
+    socket.on("disconnect", () => {
+        console.log(`disconnect detected, User: ${socket.client.id}`)
+        handleDisconnect(socket.client.id)
     })
 })
 
