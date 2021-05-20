@@ -17,7 +17,7 @@ const new_blank_stats = () => ({
     "heal": 0, "lifesteal": 0, "numb": 0, "atk": 0, "def": 0, "numb_def": 0, "atk_or_def": []
 })
 
-let rooms = {"example": {players: {}, turn: 1, phase: "Main Phase", resultPending: true, rematchAccepted: []}}
+let rooms = {}
 
 const jsonstring_to_deck = (jsonstring) => {
     let deck_list = JSON.parse(jsonstring)
@@ -127,6 +127,7 @@ const initRoom = (socketId, roomId, userId) => {
             resultPending: true,
             readyPlayers: [],
             rematchAccepted: [],
+            isOpen: true,
         }
     }
     socketUsernameKvp[socketId] = {user: userId, room: roomId}
@@ -134,23 +135,34 @@ const initRoom = (socketId, roomId, userId) => {
 
 const joinRoom   = (socketId, roomId, player2Id) => { 
     rooms[roomId]["players"][player2Id] = initNewPlayer(player2Id) 
+    rooms[roomId].isOpen = false
     socketUsernameKvp[socketId] = {user: player2Id, room: roomId}
 }
 
 const get_open_rooms = () => {
     let roomIds = Object.keys(rooms)
     console.log("open_rooms:", Object.keys(rooms))
-    return roomIds ? roomIds.filter( room => Object.keys(rooms[room].players).length === 1) : []
+    return roomIds ? roomIds.filter( room => rooms[room].isOpen ) : []
 }
 
 const handleDisconnect = (socketId) => {
     if (socketId in socketUsernameKvp) {
         console.log(socketUsernameKvp[socketId])
-        // let user = socketUsernameKvp[socketId].user
+        let user = socketUsernameKvp[socketId].user
         let room = socketUsernameKvp[socketId].room
-        if (Object.keys(rooms[room].players).length === 1) { 
+        if (rooms[room].isOpen) { 
             delete rooms[room] 
             io.to("room-lobby").emit("room-joined", get_open_rooms())
+        }
+        else if (rooms[room].isOpen === false) {
+            rooms[room].players[user].hp = 0
+            rooms[room].aborted = true
+            if (rooms[room].resultPending) { 
+                io.to(room).emit("match-abort") 
+            } else {
+                io.to(room).emit("rematch-declined")
+            }
+
         }
     }
 }
@@ -288,6 +300,12 @@ io.on("connection", (socket) => {
     socket.on("disconnect", () => {
         console.log(`disconnect detected, User: ${socket.client.id}`)
         handleDisconnect(socket.client.id)
+    })
+
+    socket.on("claim-disconnect-win", (data) => {
+        let winner = data.player
+        rooms[data.room].resultPending = false
+        io.to(data.room).emit("game-over", winner)
     })
 })
 
