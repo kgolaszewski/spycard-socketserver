@@ -158,8 +158,11 @@ const calc_enemy_dependent_abilities = (p, e) => {
         else {
         // DESIGN CHOICE: numb N weakest instead of front N attackers; b/c can play attackers in any order
             let n = player.stats.numb
-            player.stats.numb_def += [...attackers]
+            player.stats.numb_def += [...enemy.field.filter(e => e.type === "attacker")]
                 .sort((a,b) => (a.atk - b.atk))
+                .concat(
+                    [...enemy.summons.filter(e => e.type === "attacker")].sort((a,b) => (a.atk - b.atk))
+                )
                 .slice(0,n)
                 .map(e => e.atk).sum()
             console.log("sorted attackers:", [...attackers].sort(e => e.atk))
